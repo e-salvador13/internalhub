@@ -6,10 +6,27 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save to waitlist
-    setSubmitted(true);
+    setLoading(true);
+    
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      
+      if (res.ok) {
+        setSubmitted(true);
+      }
+    } catch (error) {
+      console.error('Waitlist error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -212,9 +229,10 @@ export default function Home() {
               />
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-semibold transition-colors whitespace-nowrap"
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-wait px-6 py-3 rounded-xl font-semibold transition-colors whitespace-nowrap"
               >
-                Join Waitlist
+                {loading ? 'Joining...' : 'Join Waitlist'}
               </button>
             </form>
           )}
