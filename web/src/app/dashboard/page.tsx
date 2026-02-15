@@ -2,20 +2,82 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+
+interface App {
+  id: number;
+  name: string;
+  files: string[];
+  status: "draft" | "published";
+  url?: string;
+  createdAt: string;
+}
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
-  const [apps, setApps] = useState<any[]>([]);
+  const [apps, setApps] = useState<App[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
+
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    setUploading(true);
+    setUploadProgress("Preparing upload...");
+
+    try {
+      const formData = new FormData();
+      const appName = files[0].name.replace(/\.[^/.]+$/, "");
+      formData.append("appName", appName);
+      
+      for (const file of files) {
+        formData.append("files", file);
+      }
+
+      setUploadProgress(`Uploading ${files.length} file(s)...`);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      const newApp: App = {
+        id: Date.now(),
+        name: appName,
+        files: files.map(f => f.name),
+        status: "draft",
+        url: data.url,
+        createdAt: new Date().toISOString(),
+      };
+
+      setApps(prev => [newApp, ...prev]);
+      setUploadProgress("Done!");
+
+    } catch (error) {
+      console.error("Upload error:", error);
+      setUploadProgress("Upload failed. Try again.");
+    } finally {
+      setTimeout(() => {
+        setUploading(false);
+        setUploadProgress("");
+      }, 1500);
+    }
+  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -30,28 +92,31 @@ export default function DashboardPage() {
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     const files = Array.from(e.dataTransfer.files);
-    if (files.length === 0) return;
-
-    // For now, just show what was dropped
-    // TODO: Upload to Supabase Storage
-    setUploading(true);
-    
-    // Simulate upload
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const newApp = {
-      id: Date.now(),
-      name: files[0].name.replace(/\.[^/.]+$/, ""),
-      files: files.map(f => f.name),
-      status: "draft",
-      createdAt: new Date().toISOString(),
-    };
-    
-    setApps(prev => [newApp, ...prev]);
-    setUploading(false);
+    await uploadFiles(files);
   }, []);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    await uploadFiles(files);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handlePublish = (appId: number) => {
+    setApps(prev =>
+      prev.map(app =>
+        app.id === appId ? { ...app, status: "published" as const } : app
+      )
+    );
+  };
+
+  const handlePreview = (app: App) => {
+    if (app.url) {
+      window.open(app.url, "_blank");
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -97,16 +162,25 @@ export default function DashboardPage() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors mb-8 ${
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors mb-8 cursor-pointer ${
             isDragging
               ? "border-blue-500 bg-blue-500/10"
               : "border-gray-700 hover:border-gray-600"
           }`}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            accept=".html,.css,.js,.json,.png,.jpg,.jpeg,.gif,.svg,.zip"
+          />
           {uploading ? (
             <div className="text-gray-400">
               <div className="animate-spin w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full mx-auto mb-4"></div>
-              Uploading...
+              {uploadProgress}
             </div>
           ) : (
             <>
@@ -115,7 +189,7 @@ export default function DashboardPage() {
                 Drag & drop your app files here
               </p>
               <p className="text-gray-500 text-sm">
-                HTML, CSS, JS, or a ZIP file
+                HTML, CSS, JS, images, or click to browse
               </p>
             </>
           )}
@@ -124,7 +198,7 @@ export default function DashboardPage() {
         {/* Apps Grid */}
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Your Apps</h2>
-          
+
           {apps.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               No apps yet. Drag & drop to deploy your first app.
@@ -152,10 +226,26 @@ export default function DashboardPage() {
                     {app.files.length} file(s)
                   </p>
                   <div className="flex gap-2">
-                    <button className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
-                      Publish
-                    </button>
-                    <button className="px-3 py-1.5 bg-gray-800 text-gray-300 text-sm rounded hover:bg-gray-700">
+                    {app.status === "draft" ? (
+                      <button
+                        onClick={() => handlePublish(app.id)}
+                        className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                      >
+                        Publish
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="px-3 py-1.5 bg-green-600/50 text-white text-sm rounded cursor-not-allowed"
+                      >
+                        Published ✓
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handlePreview(app)}
+                      disabled={!app.url}
+                      className="px-3 py-1.5 bg-gray-800 text-gray-300 text-sm rounded hover:bg-gray-700 disabled:opacity-50"
+                    >
                       Preview
                     </button>
                   </div>
