@@ -180,7 +180,7 @@ export default function AppCard({ app, onStar, onPublish, onDelete, onUpdate }: 
           <div className="absolute top-3 right-12">
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 rounded-lg bg-gray-800/50 text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-gray-700 transition-all"
+              className="p-2 rounded-lg bg-gray-800/80 text-gray-400 hover:bg-gray-700 transition-all"
             >
               ⋮
             </button>
@@ -283,6 +283,13 @@ export default function AppCard({ app, onStar, onPublish, onDelete, onUpdate }: 
                 Share
               </button>
             )}
+            <button
+              onClick={() => setShowEdit(true)}
+              className="px-3 py-2 bg-gray-800 text-gray-300 text-sm rounded-lg hover:bg-gray-700 transition-colors active:scale-95"
+              title="Edit app"
+            >
+              ✏️
+            </button>
             <a
               href={getPreviewUrl()}
               target="_blank"
