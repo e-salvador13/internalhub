@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface App {
@@ -16,6 +16,15 @@ interface App {
   access_type: string;
 }
 
+interface StorageFile {
+  name: string;
+  id: string;
+  metadata?: {
+    mimetype?: string;
+    size?: number;
+  };
+}
+
 interface AppViewerProps {
   app: App;
   isOwner: boolean;
@@ -23,12 +32,55 @@ interface AppViewerProps {
 
 export default function AppViewer({ app, isOwner }: AppViewerProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const [files, setFiles] = useState<StorageFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Build the iframe URL for the app content
-  // Assuming storage_path points to Supabase storage
-  const appUrl = app.storage_path 
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/apps/${app.storage_path}/index.html`
-    : null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const storagePath = app.storage_path;
+
+  useEffect(() => {
+    async function loadFiles() {
+      if (!storagePath || !supabaseUrl) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // List files in the storage path
+        const response = await fetch(`/api/apps/${app.id}/files`);
+        if (response.ok) {
+          const data = await response.json();
+          setFiles(data.files || []);
+        }
+      } catch (err) {
+        console.error("Failed to load files:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFiles();
+  }, [app.id, storagePath, supabaseUrl]);
+
+  // Get file URL
+  const getFileUrl = (fileName: string) => {
+    return `${supabaseUrl}/storage/v1/object/public/apps/${storagePath}/${fileName}`;
+  };
+
+  // Check if file is an image
+  const isImage = (fileName: string) => {
+    return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(fileName);
+  };
+
+  // Check if file is HTML
+  const isHtml = (fileName: string) => {
+    return /\.(html|htm)$/i.test(fileName);
+  };
+
+  // Find main file (index.html or first file)
+  const mainFile = files.find(f => f.name === "index.html") || files[0];
+  const hasHtml = files.some(f => isHtml(f.name));
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
@@ -76,20 +128,22 @@ export default function AppViewer({ app, isOwner }: AppViewerProps) {
               <span>•</span>
               <span>Created {new Date(app.created_at).toLocaleDateString()}</span>
             </div>
+            {files.length > 0 && (
+              <div className="mt-3 text-sm text-gray-500">
+                <span>Uploaded {files.length} file(s)</span>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* App Content */}
       <div className="flex-1 relative">
-        {appUrl ? (
-          <iframe
-            src={appUrl}
-            className="w-full h-full absolute inset-0 border-0"
-            title={app.name}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          />
-        ) : (
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full"></div>
+          </div>
+        ) : files.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-6xl mb-4">📦</div>
@@ -105,6 +159,54 @@ export default function AppViewer({ app, isOwner }: AppViewerProps) {
                   Upload Files
                 </Link>
               )}
+            </div>
+          </div>
+        ) : hasHtml && mainFile && isHtml(mainFile.name) ? (
+          // Show HTML in iframe
+          <iframe
+            src={getFileUrl(mainFile.name)}
+            className="w-full h-full absolute inset-0 border-0"
+            title={app.name}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />
+        ) : (
+          // Show files gallery
+          <div className="p-6">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-lg font-semibold text-white mb-4">Files</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {files.map((file) => (
+                  <a
+                    key={file.id || file.name}
+                    href={getFileUrl(file.name)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block bg-gray-900 border border-gray-800 rounded-lg overflow-hidden hover:border-gray-700 transition-colors"
+                  >
+                    {isImage(file.name) ? (
+                      <div className="aspect-video bg-gray-800 flex items-center justify-center">
+                        <img
+                          src={getFileUrl(file.name)}
+                          alt={file.name}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="aspect-video bg-gray-800 flex items-center justify-center">
+                        <span className="text-4xl">📄</span>
+                      </div>
+                    )}
+                    <div className="p-3">
+                      <p className="text-sm text-white truncate">{file.name}</p>
+                      {file.metadata?.size && (
+                        <p className="text-xs text-gray-500">
+                          {(file.metadata.size / 1024).toFixed(1)} KB
+                        </p>
+                      )}
+                    </div>
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         )}
