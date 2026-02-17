@@ -7,7 +7,7 @@ Internal app hosting for the AI era. Employees deploy AI-generated tools, share 
 
 ---
 
-## Phase 1: Landing & Waitlist 🚧
+## Phase 1: Landing & Waitlist ✅
 - [x] Landing page with value prop
 - [x] Waitlist signup form
 - [x] API route for waitlist (`/api/waitlist`)
@@ -19,21 +19,21 @@ Internal app hosting for the AI era. Employees deploy AI-generated tools, share 
 
 ---
 
-## Phase 2: Auth & Workspace
-- [ ] Set up NextAuth
-- [ ] Google OAuth provider
+## Phase 2: Auth & Workspace 🚧
+- [x] Set up NextAuth
+- [x] Google OAuth provider
 - [ ] Workspace creation flow (first user from domain = admin)
 - [ ] Domain verification
-- [ ] User model + roles (admin/member)
+- [x] User model + roles (admin/member)
 - [ ] Protected routes middleware
-- [ ] Dashboard layout
+- [x] Dashboard layout
 
 ---
 
-## Phase 3: App Deployment
-- [ ] File upload component (drag & drop)
-- [ ] Upload to Supabase Storage
-- [ ] App creation API
+## Phase 3: App Deployment ✅
+- [x] File upload component (drag & drop)
+- [x] Upload to Supabase Storage
+- [x] App creation API
 - [ ] Subdomain routing: `[app].[company].internalhub.app`
 - [ ] Auth gate middleware for app subdomains
 - [ ] GitHub repo connection (stretch)
@@ -41,25 +41,26 @@ Internal app hosting for the AI era. Employees deploy AI-generated tools, share 
 
 ---
 
-## Phase 4: App Directory
-- [ ] Dashboard home (app grid)
-- [ ] Search component
+## Phase 4: App Directory ✅
+- [x] Dashboard home (app grid)
+- [x] Search component
+- [x] Filter tabs (All / My Apps / Starred)
+- [x] Star/favorite API + UI
+- [x] "My Apps" section
+- [x] "Starred" section
+- [x] Sort by: recent, popular, name
 - [ ] Filter by tags/categories
-- [ ] Star/favorite API + UI
-- [ ] "My Apps" section
-- [ ] "Starred" section
-- [ ] Recently added feed
-- [ ] Most popular feed
+- [ ] Most popular feed (needs view tracking)
 
 ---
 
-## Phase 5: Draft & Publish
-- [ ] Draft status (only creator sees)
-- [ ] Publish button + confirmation
+## Phase 5: Draft & Publish ✅
+- [x] Draft status (stored in DB)
+- [x] Publish button
 - [ ] Unpublish option
 - [ ] App settings page
 - [ ] Edit name/description/tags
-- [ ] Delete app (with confirmation)
+- [x] Delete app (with confirmation)
 
 ---
 
@@ -77,7 +78,7 @@ Internal app hosting for the AI era. Employees deploy AI-generated tools, share 
 ## Tech Stack
 | Layer | Tech |
 |-------|------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Auth | NextAuth + Google |
 | Database | Supabase Postgres |
 | Storage | Supabase Storage |
@@ -112,17 +113,30 @@ NEXTAUTH_URL=
 ---
 
 ## Current Sprint
-**Focus:** Get landing page live with working waitlist
+**Focus:** Get Supabase connected and test full flow
 
 ### In Progress
 - [ ] Create Supabase project at supabase.com
 - [ ] Run schema.sql in SQL editor
-- [ ] Deploy to Vercel (connect GitHub)
+- [ ] Create storage bucket "apps" with public access
 - [ ] Add Supabase env vars in Vercel
-- [ ] Test full waitlist flow
+- [ ] Test full upload → app creation flow
 
 ### Blocked
-- Vercel deploy needs Eduardo to connect via dashboard
+- OAuth callback error (Eduardo debugging)
+
+---
+
+## Recent Changes (2025-02-15)
+- Added `/api/apps` route (list, create, filter, search)
+- Added `/api/apps/[id]` route (get, update, delete)
+- Added `/api/apps/[id]/star` route (toggle star)
+- Updated upload API to save app metadata to database
+- Created reusable components: AppCard, SearchBar, FilterTabs, EmptyState, LoadingSpinner
+- Improved dashboard with app grid, search, tabs, sorting
+- Added star/favorite functionality
+- Added delete with confirmation
+- Build passes ✅
 
 ---
 
@@ -141,17 +155,34 @@ NEXTAUTH_URL=
 ## Key Files
 ```
 web/
-├── src/app/
-│   ├── page.tsx         # Landing page
-│   ├── api/waitlist/    # Waitlist API
-│   └── (dashboard)/     # Protected routes (TODO)
-├── .env.example         # Env template
+├── src/
+│   ├── app/
+│   │   ├── page.tsx              # Landing page
+│   │   ├── dashboard/page.tsx    # Main dashboard
+│   │   ├── login/page.tsx        # Login page
+│   │   ├── api/
+│   │   │   ├── apps/route.ts     # Apps CRUD
+│   │   │   ├── apps/[id]/route.ts
+│   │   │   ├── apps/[id]/star/route.ts
+│   │   │   ├── upload/route.ts   # File upload
+│   │   │   ├── waitlist/route.ts
+│   │   │   └── auth/[...nextauth]/route.ts
+│   ├── components/               # Reusable UI
+│   │   ├── AppCard.tsx
+│   │   ├── SearchBar.tsx
+│   │   ├── FilterTabs.tsx
+│   │   ├── EmptyState.tsx
+│   │   └── LoadingSpinner.tsx
+│   └── lib/
+│       ├── supabase.ts           # Supabase client
+│       └── types.ts              # TypeScript types
+├── .env.example
 └── package.json
 
 supabase/
-└── schema.sql           # Database schema
+└── schema.sql
 ```
 
 ---
 
-*Last updated: 2026-02-13*
+*Last updated: 2025-02-15*
