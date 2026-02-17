@@ -41,20 +41,14 @@ export async function POST(request: NextRequest) {
     //   html: `<a href="${verifyUrl}">Click here to sign in</a>`,
     // });
 
-    // For development, return the token (remove in production)
-    if (process.env.NODE_ENV === "development") {
-      return NextResponse.json({
-        success: true,
-        message: "Magic link created",
-        // DEV ONLY - remove in production
-        devToken: token,
-        devLink: verifyUrl.toString(),
-      });
-    }
-
+    // Show link on screen until email sending is configured
+    // TODO: Set up Resend/SendGrid and remove devLink in production
+    const showDevLink = process.env.NODE_ENV === "development" || !process.env.RESEND_API_KEY;
+    
     return NextResponse.json({
       success: true,
-      message: "Check your email for the login link",
+      message: showDevLink ? "Magic link created" : "Check your email for the login link",
+      ...(showDevLink && { devLink: verifyUrl.toString() }),
     });
   } catch (error) {
     console.error("[Magic Link] Error:", error);
