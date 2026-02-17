@@ -31,6 +31,9 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [sortBy, setSortBy] = useState<"recent" | "name">("recent");
+  
+  // Mobile menu state
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Fetch apps
   const fetchApps = useCallback(async () => {
@@ -146,6 +149,13 @@ export default function DashboardPage() {
     }
   };
 
+  // Touch-friendly file selection
+  const handleTouchUpload = () => {
+    if (!uploading) {
+      fileInputRef.current?.click();
+    }
+  };
+
   // App actions
   const handleStar = async (appId: string) => {
     try {
@@ -232,16 +242,18 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 sticky top-0 bg-gray-950/95 backdrop-blur-sm z-20">
+      {/* Header - Mobile responsive */}
+      <header className="border-b border-gray-800 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 bg-gray-950/95 backdrop-blur-sm z-20">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-white">InternalHub</h1>
-            <span className="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <h1 className="text-lg sm:text-xl font-bold text-white">InternalHub</h1>
+            <span className="hidden sm:inline px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm">
               Your Apps
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          
+          {/* Desktop user info */}
+          <div className="hidden sm:flex items-center gap-4">
             {session?.user?.email && (
               <>
                 <span className="text-gray-400 text-sm">{session.user.email}</span>
@@ -254,21 +266,52 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+          
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="sm:hidden p-2 text-gray-400 hover:text-white"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
         </div>
+        
+        {/* Mobile menu dropdown */}
+        {showMobileMenu && (
+          <div className="sm:hidden mt-3 pt-3 border-t border-gray-800">
+            {session?.user?.email && (
+              <div className="flex flex-col gap-2">
+                <span className="text-gray-400 text-sm">{session.user.email}</span>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="text-left text-gray-400 hover:text-white text-sm py-2"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Upload Zone */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Upload Zone - Touch-friendly */}
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => !uploading && fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all mb-8 cursor-pointer ${
+          onClick={handleTouchUpload}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            handleTouchUpload();
+          }}
+          className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all mb-6 sm:mb-8 cursor-pointer touch-manipulation ${
             isDragging
               ? "border-blue-500 bg-blue-500/10 scale-[1.02]"
-              : "border-gray-700 hover:border-gray-600 hover:bg-gray-900/50"
+              : "border-gray-700 hover:border-gray-600 hover:bg-gray-900/50 active:bg-gray-900/70"
           }`}
         >
           <input
@@ -285,29 +328,33 @@ export default function DashboardPage() {
               <p className="text-sm">{uploadProgress}</p>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-4">
-              <div className="text-3xl">📦</div>
-              <div className="text-left">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="text-3xl sm:text-3xl">📦</div>
+              <div className="text-center sm:text-left">
                 <p className="text-gray-300 font-medium">
-                  Drag & drop your app files
+                  <span className="hidden sm:inline">Drag & drop your app files</span>
+                  <span className="sm:hidden">Tap to upload files</span>
                 </p>
                 <p className="text-gray-500 text-sm">
-                  HTML, CSS, JS, images — or click to browse
+                  HTML, CSS, JS, images — <span className="hidden sm:inline">or click to browse</span>
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Filters & Search */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        {/* Filters & Search - Mobile responsive */}
+        <div className="flex flex-col gap-4 mb-6">
+          {/* Tabs */}
           <FilterTabs
             activeTab={activeTab}
             onTabChange={(tab) => setActiveTab(tab as FilterTab)}
             tabs={tabs}
           />
-          <div className="flex items-center gap-3">
-            <div className="w-64">
+          
+          {/* Search and Sort - stack on mobile */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex-1 sm:max-w-xs">
               <SearchBar
                 value={searchQuery}
                 onChange={setSearchQuery}
@@ -325,7 +372,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Apps Grid */}
+        {/* Apps Grid - Responsive columns */}
         {loading ? (
           <LoadingSpinner text="Loading apps..." />
         ) : error ? (
@@ -333,7 +380,7 @@ export default function DashboardPage() {
             <div className="text-red-400 mb-4">⚠️ {error}</div>
             <button
               onClick={fetchApps}
-              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 active:scale-95"
             >
               Try Again
             </button>
@@ -353,7 +400,7 @@ export default function DashboardPage() {
                 ? "Star apps to quickly access them here"
                 : searchQuery
                 ? "Try a different search term"
-                : "Drag & drop files above to create your first app"
+                : "Tap the upload zone above to create your first app"
             }
             action={
               !searchQuery && activeTab !== "starred"
@@ -365,7 +412,7 @@ export default function DashboardPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
             {filteredApps.map((app) => (
               <AppCard
                 key={app.id}

@@ -137,7 +137,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/apps/[id] - Delete an app
+// DELETE /api/apps/[id] - Delete an app with full storage cleanup
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -167,7 +167,40 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
-    // Delete associated data
+    // Delete storage files FIRST (before deleting database records)
+    if (existingApp.storage_path) {
+      try {
+        // List all files in the storage path
+        const { data: files, error: listError } = await supabase.storage
+          .from('apps')
+          .list(existingApp.storage_path, {
+            limit: 1000,
+          });
+        
+        if (listError) {
+          console.error('[App] Storage list error:', listError);
+        } else if (files && files.length > 0) {
+          // Build array of full file paths
+          const filePaths = files.map(file => `${existingApp.storage_path}/${file.name}`);
+          
+          // Delete all files
+          const { error: deleteError } = await supabase.storage
+            .from('apps')
+            .remove(filePaths);
+          
+          if (deleteError) {
+            console.error('[App] Storage delete error:', deleteError);
+          } else {
+            console.log(`[App] Deleted ${filePaths.length} files from storage`);
+          }
+        }
+      } catch (storageError) {
+        // Log but don't fail the delete
+        console.error('[App] Storage cleanup error:', storageError);
+      }
+    }
+
+    // Delete associated database records
     await supabase.from('stars').delete().eq('app_id', id);
     await supabase.from('app_access_log').delete().eq('app_id', id);
     await supabase.from('magic_tokens').delete().eq('app_id', id);
@@ -181,17 +214,6 @@ export async function DELETE(
     if (error) {
       console.error('[App] Delete error:', error);
       return NextResponse.json({ error: 'Failed to delete app' }, { status: 500 });
-    }
-
-    // Delete storage files if exists
-    if (existingApp.storage_path) {
-      const { error: storageError } = await supabase.storage
-        .from('apps')
-        .remove([existingApp.storage_path]);
-      
-      if (storageError) {
-        console.error('[App] Storage delete error:', storageError);
-      }
     }
 
     return NextResponse.json({ success: true });

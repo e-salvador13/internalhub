@@ -6,6 +6,7 @@ import { AccessType } from "@/lib/types";
 interface SharingSettingsProps {
   appId: string;
   appName: string;
+  appSlug?: string;
   currentSettings: {
     access_type: AccessType;
     access_password?: string;
@@ -19,6 +20,7 @@ interface SharingSettingsProps {
 export default function SharingSettings({
   appId,
   appName,
+  appSlug,
   currentSettings,
   onClose,
   onSave,
@@ -31,8 +33,10 @@ export default function SharingSettings({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Use slug for nicer URLs when available
+  const identifier = appSlug || appId;
   const shareUrl = typeof window !== "undefined" 
-    ? `${window.location.origin}/a/${appId}`
+    ? `${window.location.origin}/a/${identifier}`
     : "";
 
   const handleSave = async () => {

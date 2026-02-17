@@ -34,21 +34,70 @@ async function hasPasswordAccess(appId: string): Promise<boolean> {
   return accessCookie === "granted";
 }
 
+// Check if user has email-verified access for this app
+async function hasEmailAccess(appId: string, email: string): Promise<boolean> {
+  const cookieStore = await cookies();
+  const accessCookie = cookieStore.get(`app_email_access_${appId}`)?.value;
+  return accessCookie === email;
+}
+
 export default async function AppPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
   
   const supabase = getServiceClient();
   
-  // Get app with owner info
-  const { data: app, error } = await supabase
-    .from("apps")
-    .select(`
-      *,
-      owner:users!apps_owner_id_fkey(id, name, email)
-    `)
-    .eq("id", id)
-    .single();
+  // Try to find app by ID first, then by slug
+  let app;
+  let error;
+  
+  // Check if id is a UUID (standard format)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  
+  if (isUUID) {
+    // Look up by ID
+    const result = await supabase
+      .from("apps")
+      .select(`
+        *,
+        owner:users!apps_owner_id_fkey(id, name, email)
+      `)
+      .eq("id", id)
+      .single();
+    
+    app = result.data;
+    error = result.error;
+  } else {
+    // Look up by slug
+    const result = await supabase
+      .from("apps")
+      .select(`
+        *,
+        owner:users!apps_owner_id_fkey(id, name, email)
+      `)
+      .eq("slug", id)
+      .single();
+    
+    app = result.data;
+    error = result.error;
+    
+    // If not found by slug, try by ID anyway (some IDs might not be UUID format)
+    if (error || !app) {
+      const fallbackResult = await supabase
+        .from("apps")
+        .select(`
+          *,
+          owner:users!apps_owner_id_fkey(id, name, email)
+        `)
+        .eq("id", id)
+        .single();
+      
+      if (fallbackResult.data) {
+        app = fallbackResult.data;
+        error = null;
+      }
+    }
+  }
   
   if (error || !app) {
     return (
@@ -75,29 +124,48 @@ export default async function AppPage({ params, searchParams }: PageProps) {
   if (!accessResult.allowed) {
     // Password protected - check for password cookie
     if (accessResult.reason === "password_required") {
-      const hasAccess = await hasPasswordAccess(id);
+      const hasAccess = await hasPasswordAccess(app.id);
       if (hasAccess) {
         // Already authenticated with password
         await logAppAccess(app.id, undefined, "password");
         return <AppViewer app={app} isOwner={false} />;
       }
       
+      // Use slug in URL if available
+      const returnPath = app.slug ? `/a/${app.slug}` : `/a/${app.id}`;
+      
       return (
         <AccessGate 
           app={app} 
           gateType="password"
-          returnUrl={`/a/${id}`}
+          returnUrl={returnPath}
         />
       );
     }
     
     // Email required (email_list or domain access)
     if (accessResult.reason === "email_required") {
+      // Check if user verified email for this app
+      if (userEmail) {
+        const emailVerified = await hasEmailAccess(app.id, userEmail);
+        if (emailVerified) {
+          // Re-check access with the verified email
+          const recheckResult = canAccessApp(app, userEmail);
+          if (recheckResult.allowed) {
+            await logAppAccess(app.id, userEmail, app.access_type);
+            return <AppViewer app={app} isOwner={false} />;
+          }
+        }
+      }
+      
+      // Use slug in URL if available
+      const returnPath = app.slug ? `/a/${app.slug}` : `/a/${app.id}`;
+      
       return (
         <AccessGate 
           app={app}
           gateType="email"
-          returnUrl={`/a/${id}`}
+          returnUrl={returnPath}
           message={
             app.access_type === "domain" 
               ? `This app is restricted to @${app.access_domain} emails`
