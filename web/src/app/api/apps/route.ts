@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { getServiceClient } from '@/lib/supabase';
+import { getServiceClient, getOrCreateUser } from '@/lib/supabase';
 
-// GET /api/apps - List apps for the user's workspace
+// GET /api/apps - List apps for the current user
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession();
-    
-    // For now, allow unauthenticated access for demo (will enforce later)
     const userEmail = session?.user?.email;
-    const userDomain = userEmail?.split('@')[1] || 'demo';
+
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search') || '';
@@ -20,58 +24,24 @@ export async function GET(request: NextRequest) {
 
     const supabase = getServiceClient();
 
-    // Get or create workspace for this domain
-    let { data: workspace } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('domain', userDomain)
-      .single();
-
-    if (!workspace) {
-      // Create workspace for demo
-      const { data: newWorkspace, error: wsError } = await supabase
-        .from('workspaces')
-        .insert({ name: userDomain, domain: userDomain })
-        .select('id')
-        .single();
-      
-      if (wsError) {
-        console.error('[Apps] Error creating workspace:', wsError);
-        return NextResponse.json({ apps: [], total: 0 });
-      }
-      workspace = newWorkspace;
-    }
-
     // Get or create user
-    let { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', userEmail || 'demo@demo.com')
-      .single();
-
-    if (!user && userEmail) {
-      const { data: newUser } = await supabase
-        .from('users')
-        .insert({ 
-          email: userEmail, 
-          name: session?.user?.name,
-          workspace_id: workspace.id,
-          role: 'member'
-        })
-        .select('id')
-        .single();
-      user = newUser;
+    const user = await getOrCreateUser(userEmail, session?.user?.name || undefined);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
     }
 
-    // Build query
+    // Build query - only show user's own apps in dashboard
     let query = supabase
       .from('apps')
       .select(`
         *,
-        creator:users!apps_creator_id_fkey(id, name, email, avatar_url),
+        owner:users!apps_owner_id_fkey(id, name, email, avatar_url),
         stars(user_id)
       `)
-      .eq('workspace_id', workspace.id);
+      .eq('owner_id', user.id);
 
     // Apply filters
     if (status !== 'all') {
@@ -82,14 +52,10 @@ export async function GET(request: NextRequest) {
       query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
-    if (myApps && user) {
-      query = query.eq('creator_id', user.id);
-    }
-
     // Apply sorting
     switch (sort) {
       case 'popular':
-        query = query.order('created_at', { ascending: false }); // TODO: sort by view count
+        query = query.order('created_at', { ascending: false });
         break;
       case 'name':
         query = query.order('name', { ascending: true });
@@ -109,7 +75,7 @@ export async function GET(request: NextRequest) {
     // Transform data
     const transformedApps = (apps || []).map(app => {
       const starCount = app.stars?.length || 0;
-      const isStarred = user ? app.stars?.some((s: any) => s.user_id === user.id) : false;
+      const isStarred = app.stars?.some((s: any) => s.user_id === user.id);
 
       return {
         id: app.id,
@@ -117,8 +83,8 @@ export async function GET(request: NextRequest) {
         name: app.name,
         description: app.description,
         status: app.status,
-        creator_name: app.creator?.name,
-        creator_email: app.creator?.email,
+        owner_name: app.owner?.name,
+        owner_email: app.owner?.email,
         storage_path: app.storage_path,
         tags: app.tags,
         created_at: app.created_at,
@@ -126,10 +92,14 @@ export async function GET(request: NextRequest) {
         published_at: app.published_at,
         star_count: starCount,
         is_starred: isStarred,
+        // Access control
+        access_type: app.access_type,
+        access_emails: app.access_emails,
+        access_domain: app.access_domain,
       };
     });
 
-    // Filter starred if needed (after transform since we need is_starred)
+    // Filter starred if needed
     const finalApps = starred 
       ? transformedApps.filter(app => app.is_starred)
       : transformedApps;
@@ -150,7 +120,13 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
     const userEmail = session?.user?.email;
-    const userDomain = userEmail?.split('@')[1] || 'demo';
+
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
     const body = await request.json();
     const { name, description, storage_path, tags } = body;
@@ -161,41 +137,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getServiceClient();
 
-    // Get or create workspace
-    let { data: workspace } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('domain', userDomain)
-      .single();
-
-    if (!workspace) {
-      const { data: newWorkspace } = await supabase
-        .from('workspaces')
-        .insert({ name: userDomain, domain: userDomain })
-        .select('id')
-        .single();
-      workspace = newWorkspace;
-    }
-
     // Get or create user
-    let { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', userEmail || 'demo@demo.com')
-      .single();
-
+    const user = await getOrCreateUser(userEmail, session?.user?.name || undefined);
     if (!user) {
-      const { data: newUser } = await supabase
-        .from('users')
-        .insert({ 
-          email: userEmail || 'demo@demo.com', 
-          name: session?.user?.name || 'Demo User',
-          workspace_id: workspace!.id,
-          role: 'member'
-        })
-        .select('id')
-        .single();
-      user = newUser;
+      return NextResponse.json({ error: 'User error' }, { status: 500 });
     }
 
     // Generate slug
@@ -210,9 +155,9 @@ export async function POST(request: NextRequest) {
         description,
         storage_path,
         tags: tags || [],
-        workspace_id: workspace!.id,
-        creator_id: user!.id,
+        owner_id: user.id,
         status: 'draft',
+        access_type: 'private', // Default to private
       })
       .select('*')
       .single();

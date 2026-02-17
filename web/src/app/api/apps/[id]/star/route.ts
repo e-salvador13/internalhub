@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { getServiceClient } from '@/lib/supabase';
+import { getServiceClient, getOrCreateUser } from '@/lib/supabase';
 
 // POST /api/apps/[id]/star - Toggle star for an app
 export async function POST(
@@ -10,53 +10,25 @@ export async function POST(
   try {
     const session = await getServerSession();
     const userEmail = session?.user?.email;
-    const userDomain = userEmail?.split('@')[1] || 'demo';
+
+    if (!userEmail) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
     const { id: appId } = await params;
     const supabase = getServiceClient();
 
-    // Get or create workspace
-    let { data: workspace } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('domain', userDomain)
-      .single();
-
-    if (!workspace) {
-      const { data: newWorkspace } = await supabase
-        .from('workspaces')
-        .insert({ name: userDomain, domain: userDomain })
-        .select('id')
-        .single();
-      workspace = newWorkspace;
-    }
-
     // Get or create user
-    let { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', userEmail || 'demo@demo.com')
-      .single();
-
+    const user = await getOrCreateUser(userEmail, session?.user?.name || undefined);
     if (!user) {
-      const { data: newUser } = await supabase
-        .from('users')
-        .insert({ 
-          email: userEmail || 'demo@demo.com', 
-          name: session?.user?.name || 'Demo User',
-          workspace_id: workspace!.id,
-          role: 'member'
-        })
-        .select('id')
-        .single();
-      user = newUser;
+      return NextResponse.json({ error: 'User error' }, { status: 500 });
     }
 
     // Check if already starred
     const { data: existingStar } = await supabase
       .from('stars')
       .select('id')
-      .eq('user_id', user!.id)
+      .eq('user_id', user.id)
       .eq('app_id', appId)
       .single();
 
@@ -73,7 +45,7 @@ export async function POST(
       await supabase
         .from('stars')
         .insert({
-          user_id: user!.id,
+          user_id: user.id,
           app_id: appId,
         });
 

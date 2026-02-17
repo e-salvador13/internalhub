@@ -10,7 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { AppCardData } from "@/lib/types";
 
-type FilterTab = "all" | "my_apps" | "starred";
+type FilterTab = "all" | "starred";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -30,7 +30,7 @@ export default function DashboardPage() {
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
-  const [sortBy, setSortBy] = useState<"recent" | "popular" | "name">("recent");
+  const [sortBy, setSortBy] = useState<"recent" | "name">("recent");
 
   // Fetch apps
   const fetchApps = useCallback(async () => {
@@ -41,13 +41,16 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
       if (activeTab === "starred") params.set("starred", "true");
-      if (activeTab === "my_apps") params.set("my_apps", "true");
       params.set("sort", sortBy);
 
       const response = await fetch(`/api/apps?${params}`);
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
         throw new Error(data.error || "Failed to fetch apps");
       }
 
@@ -58,7 +61,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, activeTab, sortBy]);
+  }, [searchQuery, activeTab, sortBy, router]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -67,9 +70,10 @@ export default function DashboardPage() {
   }, [status, router]);
 
   useEffect(() => {
-    // Only fetch if authenticated or if we want to allow demo mode
-    fetchApps();
-  }, [fetchApps]);
+    if (status === "authenticated") {
+      fetchApps();
+    }
+  }, [status, fetchApps]);
 
   // Upload handlers
   const uploadFiles = async (files: File[]) => {
@@ -205,13 +209,14 @@ export default function DashboardPage() {
   // Tab counts
   const allCount = apps.length;
   const starredApps = apps.filter(a => a.is_starred);
-  const myApps = apps.filter(a => a.creator_email === session?.user?.email);
 
   const tabs = [
     { id: "all", label: "All Apps", count: allCount },
-    { id: "my_apps", label: "My Apps", count: myApps.length },
     { id: "starred", label: "Starred", count: starredApps.length },
   ];
+
+  // Filter apps based on current tab
+  const filteredApps = activeTab === "starred" ? starredApps : apps;
 
   if (status === "loading") {
     return (
@@ -221,8 +226,9 @@ export default function DashboardPage() {
     );
   }
 
-  // Allow access even without session for demo purposes
-  const domain = (session?.user as any)?.domain || "demo";
+  if (status === "unauthenticated") {
+    return null; // Will redirect in useEffect
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -231,8 +237,8 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-white">InternalHub</h1>
-            <span className="px-2 py-1 bg-gray-800 rounded text-sm text-gray-400">
-              @{domain}
+            <span className="px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm">
+              Your Apps
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -310,11 +316,10 @@ export default function DashboardPage() {
             </div>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as "recent" | "popular" | "name")}
+              onChange={(e) => setSortBy(e.target.value as "recent" | "name")}
               className="px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-300 text-sm focus:outline-none focus:border-blue-500"
             >
               <option value="recent">Recent</option>
-              <option value="popular">Popular</option>
               <option value="name">Name</option>
             </select>
           </div>
@@ -333,26 +338,22 @@ export default function DashboardPage() {
               Try Again
             </button>
           </div>
-        ) : apps.length === 0 ? (
+        ) : filteredApps.length === 0 ? (
           <EmptyState
-            icon={activeTab === "starred" ? "⭐" : activeTab === "my_apps" ? "📁" : "📦"}
+            icon={activeTab === "starred" ? "⭐" : "📦"}
             title={
               activeTab === "starred"
                 ? "No starred apps"
-                : activeTab === "my_apps"
-                ? "No apps yet"
                 : searchQuery
                 ? "No results found"
-                : "No apps deployed"
+                : "No apps yet"
             }
             description={
               activeTab === "starred"
                 ? "Star apps to quickly access them here"
-                : activeTab === "my_apps"
-                ? "Deploy your first app by dragging files above"
                 : searchQuery
                 ? "Try a different search term"
-                : "Drag & drop files above to deploy your first app"
+                : "Drag & drop files above to create your first app"
             }
             action={
               !searchQuery && activeTab !== "starred"
@@ -365,13 +366,14 @@ export default function DashboardPage() {
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {apps.map((app) => (
+            {filteredApps.map((app) => (
               <AppCard
                 key={app.id}
                 app={app}
                 onStar={handleStar}
                 onPublish={handlePublish}
                 onDelete={handleDelete}
+                onUpdate={fetchApps}
               />
             ))}
           </div>
@@ -380,7 +382,7 @@ export default function DashboardPage() {
         {/* Stats Footer */}
         {apps.length > 0 && (
           <div className="mt-8 pt-6 border-t border-gray-800 text-center text-gray-500 text-sm">
-            {apps.length} app{apps.length !== 1 ? "s" : ""} in workspace
+            {apps.length} app{apps.length !== 1 ? "s" : ""} total
           </div>
         )}
       </main>

@@ -1,4 +1,6 @@
-// Frontend types (may differ slightly from DB types)
+// Frontend types
+
+export type AccessType = 'private' | 'public' | 'password' | 'email_list' | 'domain';
 
 export interface AppCardData {
   id: string;
@@ -6,8 +8,8 @@ export interface AppCardData {
   name: string;
   description?: string;
   status: 'draft' | 'published' | 'archived';
-  creator_name?: string;
-  creator_email?: string;
+  owner_name?: string;
+  owner_email?: string;
   storage_path?: string;
   preview_url?: string;
   tags?: string[];
@@ -17,6 +19,17 @@ export interface AppCardData {
   star_count: number;
   is_starred: boolean;
   view_count?: number;
+  // Access control
+  access_type: AccessType;
+  access_emails?: string[];
+  access_domain?: string;
+}
+
+export interface AppSharingSettings {
+  access_type: AccessType;
+  access_password?: string;
+  access_emails?: string[];
+  access_domain?: string;
 }
 
 export interface AppsFilter {
@@ -26,4 +39,11 @@ export interface AppsFilter {
   starred_only?: boolean;
   my_apps_only?: boolean;
   sort?: 'recent' | 'popular' | 'name';
+}
+
+// Session types
+export interface UserSession {
+  email: string;
+  name?: string;
+  id?: string;
 }

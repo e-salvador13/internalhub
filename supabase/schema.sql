@@ -12,29 +12,11 @@ CREATE TABLE IF NOT EXISTS waitlist (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for lookups
 CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email);
-
--- Enable RLS (but allow service key to bypass)
 ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 
 -- ===================
--- WORKSPACES (Phase 2)
--- ===================
-
-CREATE TABLE IF NOT EXISTS workspaces (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  domain TEXT NOT NULL UNIQUE,  -- e.g., "acme.com"
-  google_workspace_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_workspaces_domain ON workspaces(domain);
-
--- ===================
--- USERS (Phase 2)
+-- USERS (Simplified - no workspace required)
 -- ===================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -42,43 +24,76 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   name TEXT,
   avatar_url TEXT,
-  workspace_id UUID REFERENCES workspaces(id),
-  role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_login TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_workspace ON users(workspace_id);
 
 -- ===================
--- APPS (Phase 3)
+-- APPS (Core - with access control)
 -- ===================
 
 CREATE TABLE IF NOT EXISTS apps (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  slug TEXT NOT NULL,  -- URL slug
+  slug TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  workspace_id UUID NOT NULL REFERENCES workspaces(id),
-  creator_id UUID NOT NULL REFERENCES users(id),
+  owner_id UUID NOT NULL REFERENCES users(id),
   status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
-  storage_path TEXT,  -- Path in Supabase Storage
-  github_repo TEXT,   -- Optional GitHub connection
+  storage_path TEXT,
   tags TEXT[],
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   published_at TIMESTAMPTZ,
   
-  UNIQUE(workspace_id, slug)
+  -- Access Control (the core differentiator!)
+  access_type TEXT DEFAULT 'private' CHECK (access_type IN ('private', 'public', 'password', 'email_list', 'domain')),
+  access_password TEXT,              -- For password-protected apps
+  access_emails TEXT[],              -- For email_list access
+  access_domain TEXT,                -- For domain-based access (e.g., @company.com)
+  
+  UNIQUE(owner_id, slug)
 );
 
-CREATE INDEX IF NOT EXISTS idx_apps_workspace ON apps(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_apps_creator ON apps(creator_id);
+CREATE INDEX IF NOT EXISTS idx_apps_owner ON apps(owner_id);
 CREATE INDEX IF NOT EXISTS idx_apps_status ON apps(status);
+CREATE INDEX IF NOT EXISTS idx_apps_access_type ON apps(access_type);
 
 -- ===================
--- STARS (Phase 4)
+-- MAGIC LINK TOKENS
+-- ===================
+
+CREATE TABLE IF NOT EXISTS magic_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  app_id UUID REFERENCES apps(id),  -- Optional: which app they're trying to access
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_magic_tokens_token ON magic_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_magic_tokens_email ON magic_tokens(email);
+
+-- ===================
+-- APP ACCESS LOG (Analytics)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS app_access_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  app_id UUID NOT NULL REFERENCES apps(id),
+  accessor_email TEXT,
+  access_method TEXT,  -- 'public', 'password', 'magic_link', 'owner'
+  accessed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_access_app ON app_access_log(app_id);
+CREATE INDEX IF NOT EXISTS idx_app_access_date ON app_access_log(accessed_at);
+
+-- ===================
+-- STARS (Keep for favorites)
 -- ===================
 
 CREATE TABLE IF NOT EXISTS stars (
@@ -94,24 +109,9 @@ CREATE INDEX IF NOT EXISTS idx_stars_user ON stars(user_id);
 CREATE INDEX IF NOT EXISTS idx_stars_app ON stars(app_id);
 
 -- ===================
--- APP VIEWS (Phase 6 - Analytics)
--- ===================
-
-CREATE TABLE IF NOT EXISTS app_views (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  app_id UUID NOT NULL REFERENCES apps(id),
-  user_id UUID REFERENCES users(id),
-  viewed_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_app_views_app ON app_views(app_id);
-CREATE INDEX IF NOT EXISTS idx_app_views_date ON app_views(viewed_at);
-
--- ===================
 -- HELPER FUNCTIONS
 -- ===================
 
--- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -120,14 +120,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger for workspaces
-CREATE TRIGGER workspaces_updated_at
-  BEFORE UPDATE ON workspaces
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at();
-
--- Trigger for apps
 CREATE TRIGGER apps_updated_at
   BEFORE UPDATE ON apps
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at();
+
+-- ===================
+-- MIGRATION: If workspaces table exists, migrate data
+-- ===================
+-- Run these manually if migrating:
+-- 
+-- 1. Add owner_id to apps: ALTER TABLE apps ADD COLUMN owner_id UUID;
+-- 2. Copy creator_id to owner_id: UPDATE apps SET owner_id = creator_id;
+-- 3. Add access columns: ALTER TABLE apps ADD COLUMN access_type TEXT DEFAULT 'private';
+-- 4. etc.

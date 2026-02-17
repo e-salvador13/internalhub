@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from 'next-auth';
-import { getServiceClient } from '@/lib/supabase';
+import { getOrCreateUser } from '@/lib/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
@@ -10,7 +10,10 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
     const userEmail = session?.user?.email;
-    const userDomain = userEmail?.split('@')[1] || 'demo';
+
+    if (!userEmail) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
@@ -61,40 +64,10 @@ export async function POST(request: NextRequest) {
       .from('apps')
       .getPublicUrl(mainFile);
 
-    // Get or create workspace and user, then save app to database
-    let { data: workspace } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('domain', userDomain)
-      .single();
-
-    if (!workspace) {
-      const { data: newWorkspace } = await supabase
-        .from('workspaces')
-        .insert({ name: userDomain, domain: userDomain })
-        .select('id')
-        .single();
-      workspace = newWorkspace;
-    }
-
-    let { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', userEmail || 'demo@demo.com')
-      .single();
-
+    // Get or create user
+    const user = await getOrCreateUser(userEmail, session?.user?.name || undefined);
     if (!user) {
-      const { data: newUser } = await supabase
-        .from('users')
-        .insert({ 
-          email: userEmail || 'demo@demo.com', 
-          name: session?.user?.name || 'Demo User',
-          workspace_id: workspace!.id,
-          role: 'member'
-        })
-        .select('id')
-        .single();
-      user = newUser;
+      return NextResponse.json({ error: 'User error' }, { status: 500 });
     }
 
     // Create app record in database
@@ -105,9 +78,9 @@ export async function POST(request: NextRequest) {
         slug: appSlug,
         description,
         storage_path: storagePath,
-        workspace_id: workspace!.id,
-        creator_id: user!.id,
+        owner_id: user.id,
         status: 'draft',
+        access_type: 'private',
         tags: [],
       })
       .select('*')
@@ -134,6 +107,7 @@ export async function POST(request: NextRequest) {
         description: app.description,
         status: app.status,
         storage_path: app.storage_path,
+        access_type: app.access_type,
         created_at: app.created_at,
       },
       files: uploadedFiles,
