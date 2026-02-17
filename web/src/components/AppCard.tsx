@@ -171,12 +171,21 @@ export default function AppCard({ app, onStar, onPublish, onDelete, onUpdate }: 
 
           {/* Actions */}
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowSharing(true)}
-              className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Share
-            </button>
+            {app.status === "draft" ? (
+              <button
+                onClick={() => onPublish(app.id)}
+                className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Publish
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowSharing(true)}
+                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Share
+              </button>
+            )}
             <a
               href={getPreviewUrl()}
               target="_blank"

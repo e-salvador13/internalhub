@@ -87,7 +87,7 @@ export default function AppViewer({ app, isOwner }: AppViewerProps) {
       {/* Header */}
       <header className="border-b border-gray-800 px-4 py-3 flex items-center justify-between bg-gray-950/95 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Link href="/" className="text-gray-400 hover:text-white">
+          <Link href="/dashboard" className="text-gray-400 hover:text-white">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
