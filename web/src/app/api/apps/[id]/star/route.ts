@@ -1,56 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { getServiceClient, getOrCreateUser } from '@/lib/supabase';
+import { toggleStar, getApp } from '@/lib/store';
 
-// POST /api/apps/[id]/star - Toggle star for an app
+// POST /api/apps/[id]/star - Toggle star on an app
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession();
-    const userEmail = session?.user?.email;
-
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const { id } = await params;
+    
+    // Verify app exists
+    const app = await getApp(id);
+    if (!app) {
+      return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
 
-    const { id: appId } = await params;
-    const supabase = getServiceClient();
+    const starred = await toggleStar(id);
 
-    // Get or create user
-    const user = await getOrCreateUser(userEmail, session?.user?.name || undefined);
-    if (!user) {
-      return NextResponse.json({ error: 'User error' }, { status: 500 });
-    }
-
-    // Check if already starred
-    const { data: existingStar } = await supabase
-      .from('stars')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('app_id', appId)
-      .single();
-
-    if (existingStar) {
-      // Unstar
-      await supabase
-        .from('stars')
-        .delete()
-        .eq('id', existingStar.id);
-
-      return NextResponse.json({ starred: false });
-    } else {
-      // Star
-      await supabase
-        .from('stars')
-        .insert({
-          user_id: user.id,
-          app_id: appId,
-        });
-
-      return NextResponse.json({ starred: true });
-    }
+    return NextResponse.json({ starred });
 
   } catch (error) {
     console.error('[Star] Error:', error);

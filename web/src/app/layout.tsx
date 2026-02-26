@@ -1,18 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import { Providers } from "./providers";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "InternalHub - Internal apps, zero security headaches",
-  description: "Deploy AI-generated tools for your team. Drag, drop, done. Only your coworkers can access—secured by Google Workspace.",
-  openGraph: {
-    title: "InternalHub - Internal apps, zero security headaches",
-    description: "Deploy AI-generated tools for your team. Drag, drop, done. Only your coworkers can access—secured by Google Workspace.",
-    type: "website",
-  },
+  title: "InternalHub - Host & Share AI Apps",
+  description: "Upload your AI-generated tools, get a shareable link. Password protected.",
 };
 
 export default function RootLayout({
@@ -21,9 +12,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-gray-950 text-white antialiased`}>
-        <Providers>{children}</Providers>
+    <html lang="en">
+      <body className="antialiased">
+        {children}
       </body>
     </html>
   );

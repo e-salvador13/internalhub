@@ -1,54 +1,78 @@
 # InternalHub
 
-Internal app hosting for the AI era. Deploy AI-generated tools, share with coworkers, zero security config.
+Simple app hosting for AI-generated tools. Upload, share, done.
 
-## Concept
+## Features
 
-1. Admin connects Google Workspace
-2. Employees sign in with work Google
-3. Drag/drop deploy any static site
-4. Draft → Publish workflow
-5. Browse/search/star internal apps
+- 📦 **Drag & drop upload** — HTML, CSS, JS, images
+- 🔐 **Password protected** — Single password for your hub
+- 🔗 **Shareable links** — Get a URL to share your apps
+- ⭐ **Favorites** — Star apps you use often
+- 🔍 **Search** — Find apps quickly
+
+## Quick Start
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000
+
+**Default password:** `demo123`
+
+## Configuration
+
+Create `.env.local` in the `web` folder:
+
+```env
+# Set your password
+IH_PASSWORD=your-secure-password
+
+# Optional: Custom data directory
+# DATA_DIR=/path/to/data
+```
+
+## How It Works
+
+1. **Login** with the password
+2. **Drag & drop** files onto the upload zone
+3. **Get a link** to view/share your app
+4. **Publish** when ready to share
+
+## Data Storage
+
+All data is stored locally:
+- `data/store.json` — App metadata
+- `data/uploads/` — Uploaded files
+
+No database required.
+
+## Deploy
+
+### Vercel (Recommended)
+
+1. Push to GitHub
+2. Connect to Vercel
+3. Set `IH_PASSWORD` in environment variables
+4. Deploy
+
+**Note:** For persistent storage on Vercel, connect external storage (e.g., Vercel Blob, S3).
+
+### Self-Hosted
+
+```bash
+npm run build
+npm start
+```
 
 ## Tech Stack
 
-- **Framework:** Next.js 14 (App Router)
-- **Auth:** NextAuth + Google Workspace
-- **Database:** Supabase (Postgres)
-- **Storage:** Supabase Storage (for app files)
-- **Hosting:** Vercel (for the platform itself)
-- **App Serving:** Cloudflare Workers or Vercel Edge (for deployed apps)
+- Next.js 16 (App Router)
+- Tailwind CSS
+- Local JSON + file storage
 
-## MVP Scope
+---
 
-- [ ] Landing page
-- [ ] Google Workspace OAuth
-- [ ] File upload (drag/drop)
-- [ ] Deploy to subdomain
-- [ ] App directory with search
-- [ ] Star/favorite
-- [ ] Draft vs Published
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    InternalHub Platform                      │
-├─────────────────────────────────────────────────────────────┤
-│  internalhub.app (main platform)                            │
-│  ├── /dashboard - browse apps, search, favorites            │
-│  ├── /deploy - upload new app                               │
-│  ├── /app/[id] - app settings, analytics                    │
-│  └── /admin - workspace settings                            │
-├─────────────────────────────────────────────────────────────┤
-│  [app-slug].[company].internalhub.app (deployed apps)       │
-│  └── Auth gate: only @company.com can access                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## URL Structure
-
-- Platform: `internalhub.app`
-- Company apps: `expense-tracker.acme.internalhub.app`
-- Auth: Google Workspace enforced at edge
-
+*Upload your AI creations. Share with anyone. Simple.*

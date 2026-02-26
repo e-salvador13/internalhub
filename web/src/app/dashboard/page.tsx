@@ -1,8 +1,7 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import AppCard from "@/components/AppCard";
 import SearchBar from "@/components/SearchBar";
 import FilterTabs from "@/components/FilterTabs";
@@ -13,7 +12,6 @@ import { AppCardData } from "@/lib/types";
 type FilterTab = "all" | "starred";
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
   
   // Upload state
@@ -67,16 +65,15 @@ export default function DashboardPage() {
   }, [searchQuery, activeTab, sortBy, router]);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    }
-  }, [status, router]);
+    fetchApps();
+  }, [fetchApps]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchApps();
-    }
-  }, [status, fetchApps]);
+  // Logout
+  const handleLogout = async () => {
+    await fetch('/api/login', { method: 'DELETE' });
+    router.push('/login');
+    router.refresh();
+  };
 
   // Upload handlers
   const uploadFiles = async (files: File[]) => {
@@ -228,44 +225,25 @@ export default function DashboardPage() {
   // Filter apps based on current tab
   const filteredApps = activeTab === "starred" ? starredApps : apps;
 
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <LoadingSpinner text="Loading..." />
-      </div>
-    );
-  }
-
-  if (status === "unauthenticated") {
-    return null; // Will redirect in useEffect
-  }
-
   return (
     <div className="min-h-screen bg-gray-950">
       {/* Header - Mobile responsive */}
       <header className="border-b border-gray-800 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 bg-gray-950/95 backdrop-blur-sm z-20">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-sm font-bold text-white">IH</span>
+            </div>
             <h1 className="text-lg sm:text-xl font-bold text-white">InternalHub</h1>
-            <span className="hidden sm:inline px-2 py-1 bg-blue-600/20 text-blue-400 rounded text-sm">
-              Your Apps
-            </span>
           </div>
           
-          {/* Desktop user info */}
-          <div className="hidden sm:flex items-center gap-4">
-            {session?.user?.email && (
-              <>
-                <span className="text-gray-400 text-sm">{session.user.email}</span>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="text-gray-400 hover:text-white text-sm"
-                >
-                  Sign out
-                </button>
-              </>
-            )}
-          </div>
+          {/* Desktop sign out */}
+          <button
+            onClick={handleLogout}
+            className="hidden sm:block text-gray-400 hover:text-white text-sm px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Sign out
+          </button>
           
           {/* Mobile menu button */}
           <button
@@ -281,17 +259,12 @@ export default function DashboardPage() {
         {/* Mobile menu dropdown */}
         {showMobileMenu && (
           <div className="sm:hidden mt-3 pt-3 border-t border-gray-800">
-            {session?.user?.email && (
-              <div className="flex flex-col gap-2">
-                <span className="text-gray-400 text-sm">{session.user.email}</span>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="text-left text-gray-400 hover:text-white text-sm py-2"
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
+            <button
+              onClick={handleLogout}
+              className="text-left text-gray-400 hover:text-white text-sm py-2 w-full"
+            >
+              Sign out
+            </button>
           </div>
         )}
       </header>
