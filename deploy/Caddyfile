@@ -1,0 +1,32 @@
+# Personal Vercel - Caddy Configuration
+# Replace yourdomain.com with your actual domain
+
+# Main dashboard
+yourdomain.com {
+    reverse_proxy localhost:3000
+}
+
+# Wildcard for deployed apps
+*.yourdomain.com {
+    # Extract subdomain and serve from /var/www/apps/{subdomain}
+    root * /var/www/apps/{labels.2}
+    
+    # Try files, then index.html, then 404
+    try_files {path} {path}/ /index.html
+    file_server
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    
+    # Handle missing apps
+    handle_errors {
+        respond "App not found. Deploy with: curl -X POST https://yourdomain.com/api/deploy" 404
+    }
+}
+
+# API endpoint for deploys (runs on dashboard)
+# This is handled by the Next.js app on localhost:3000
